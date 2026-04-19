@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matches Vision</title>
+<style>
+  body{background:#0A0E27;color:white;font-family:sans-serif;padding:15px;margin:0}
+.header{color:#00D9FF;font-size:24px;font-weight:bold;margin-bottom:20px}
+.tabs{display:flex;gap:10px;margin-bottom:25px}
+.tab{padding:10px 20px;border-radius:8px;text-align:center;background:#1A1F3A;border:1px solid #2A2F4A;font-size:14px}
+.tab.active{background:#00D9FF;color:#0A0E27;font-weight:bold}
+.desc{text-align:center;margin-bottom:25px}
+.desc h1{color:#00D9FF;font-size:28px;margin:0 0 8px 0}
+.desc p{opacity:0.8;margin:0;font-size:14px;line-height:1.4}
+.card{background:#1A1F3A;border:1px solid #2A2F4A;border-radius:16px;padding:25px 20px;margin-bottom:20px;text-align:center}
+.card-title{color:#00D9FF;font-size:18px;font-weight:600;margin-bottom:20px}
+.circle{width:100px;height:100px;background:#0A0E27;border-radius:50%;margin:0 auto 15px auto;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:bold}
+.circle-label{font-size:14px;opacity:0.7}
+.predicted{background:#00D9FF;color:#0A0E27}
+</style>
+</head>
+<body>
+<div class="header">Matches Vision</div>
+
+<div class="tabs">
+  <div class="tab active">Matches Tool</div>
+  <div class="tab">Even / Odd Tool</div>
+</div>
+
+<div class="desc">
+  <h1>Matches Tool</h1>
+  <p>Track the <b>most frequent digit</b> for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>
+</div>
+
+<div id="container"></div>
+
+<script>
+window.onload = function() {
+  const markets = [
+    {symbol:"R_10", name:"Volatility 10 (1s) Index"},
+    {symbol:"R_25", name:"Volatility 25 (1s) Index"},
+    {symbol:"R_50", name:"Volatility 50 (1s) Index"},
+    {symbol:"R_75", name:"Volatility 75 (1s) Index"},
+    {symbol:"R_100", name:"Volatility 100 (1s) Index"}
+  ];
+  
+  const container = document.getElementById("container");
+  let data = {};
+
+  markets.forEach((m, index) => {
+    data[m.symbol] = {digits:{0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0},timer:15,showPred:false};
+    
+    let div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      <div class="card-title">${m.name}</div>
+      <div class="circle" id="${m.symbol}_circle">15s</div>
+      <div class="circle-label" id="${m.symbol}_label">Next prediction in</div>
+    `;
+    container.appendChild(div);
+
+    setInterval(()=>{
+      let d=data[m.symbol];
+      let circle = document.getElementById(m.symbol+"_circle");
+      let label = document.getElementById(m.symbol+"_label");
+      
+      if(d.showPred){
+        // Showing prediction for 2 seconds
+        d.timer--;
+        if(d.timer<=0){
+          d.showPred = false;
+          d.timer = 15;
+          d.digits = {0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0};
+          circle.classList.remove('predicted');
+          label.innerText = 'Next prediction in';
+        }
+      } else {
+        // Counting down
+        d.timer--;
+        circle.innerText = d.timer+'s';
+        if(d.timer<=0){
+          // Time's up - show prediction
+          let maxCount=0,maxDigit=0;
+          for(let i=0;i<=9;i++) if(d.digits[i]>maxCount){maxCount=m.digits[i];maxDigit=i;}
+          let prediction = maxCount>0? maxDigit : '-';
+          
+          circle.innerText = prediction;
+          circle.classList.add('predicted');
+          label.innerText = 'Predicted digit';
+          d.showPred = true;
+          d.timer = 2; // Show prediction for 2 seconds
+        }
+      }
+    },1000);
+
+    setTimeout(() => {
+      let ws=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+      ws.onopen=()=>ws.send(JSON.stringify({ticks:m.symbol,subscribe:1}));
+      ws.onmessage=e=>{
+        let res=JSON.parse(e.data);
+        if(res.tick &&!data[m.symbol].showPred){
+          let last=parseInt(res.tick.quote.toFixed(2).slice(-1));
+          data[m.symbol].digits[last]++;
+        }
+      };
+    }, index * 1000);
+  });
+};
+</script>
+</body>
+</html>
