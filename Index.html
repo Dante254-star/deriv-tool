@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Matches Tool</title>
+
+<style>
+body {
+    font-family: Arial;
+    background: #0b1a2a;
+    color: white;
+    text-align: center;
+}
+
+.container {
+    max-width: 500px;
+    margin: auto;
+}
+
+.title {
+    font-size: 26px;
+    margin: 20px;
+    color: #00d4ff;
+}
+
+.card {
+    background: #132c46;
+    padding: 20px;
+    margin: 15px;
+    border-radius: 15px;
+}
+
+.circle {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: linear-gradient(45deg,#ff00cc,#3333ff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    margin: 10px auto;
+}
+
+.confidence {
+    color: gold;
+}
+
+button {
+    background: green;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 10px;
+    margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <div class="title">Matches Tool</div>
+    <div id="cards">Loading data...</div>
+</div>
+
+<script>
+const symbols = ["R_10_1S","R_25_1S","R_50_1S","R_75_1S","R_100_1S"];
+
+let stats = {};
+symbols.forEach(s => stats[s] = Array(10).fill(0));
+
+const ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+
+ws.onopen = () => {
+    console.log("Connected ✅");
+
+    symbols.forEach(sym => {
+        ws.send(JSON.stringify({
+            ticks: sym,
+            subscribe: 1
+        }));
+    });
+};
+
+ws.onerror = (e) => {
+    document.getElementById("cards").innerHTML = "Connection error ❌";
+};
+
+ws.onmessage = (msg) => {
+    let data = JSON.parse(msg.data);
+
+    if (data.tick) {
+        let sym = data.tick.symbol;
+        let price = data.tick.quote.toString();
+        let last = parseInt(price.slice(-1));
+
+        stats[sym][last]++;
+
+        draw();
+    }
+};
+
+function predict(arr) {
+    let max = Math.max(...arr);
+    let digit = arr.indexOf(max);
+    let total = arr.reduce((a,b)=>a+b,0);
+    let conf = total ? Math.floor((max/total)*100) : 0;
+
+    return {digit, conf};
+}
+
+function draw() {
+    let html = "";
+
+    symbols.forEach(sym => {
+        let p = predict(stats[sym]);
+
+        html += `
+        <div class="card">
+            <h3>${sym.replace("R_","Volatility ").replace("_1S"," (1s)")}</h3>
+
+            <div class="circle">${p.digit}</div>
+
+            <div class="confidence">Confidence: ${p.conf}%</div>
+
+            <button>TRADE NOW</button>
+        </div>
+        `;
+    });
+
+    document.getElementById("cards").innerHTML = html;
+}
+</script>
+
+</body>
+</html>
