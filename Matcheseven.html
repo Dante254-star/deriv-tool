@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matches Vision</title>
+<style>
+  body{background:#0B0F1A;color:white;font-family:sans-serif;padding:15px;margin:0}
+.header{color:#00D9FF;font-size:24px;font-weight:bold;margin-bottom:20px}
+.tabs{display:flex;gap:10px;margin-bottom:25px}
+.tab{padding:10px 20px;border-radius:8px;text-align:center;background:#151A2A;border:1px solid #1F2535;font-size:14px;cursor:pointer}
+.tab.active{background:#00D9FF;color:#0B0F1A;font-weight:bold}
+.desc{text-align:center;margin-bottom:25px}
+.desc h1{color:#00D9FF;font-size:28px;margin:0 0 8px 0}
+.desc p{opacity:0.8;margin:0;font-size:14px;line-height:1.4}
+.card{background:#151A2A;border:1px solid #1F2535;border-radius:16px;padding:25px 20px;margin-bottom:20px;text-align:center}
+.card-title{color:#00D9FF;font-size:18px;font-weight:600;margin-bottom:20px}
+.circle{width:110px;height:110px;border-radius:50%;margin:0 auto 12px auto;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:bold}
+.countdown{background:#1A2030;color:#FFF}
+.prediction{background:linear-gradient(135deg,#00A8FF,#0077FF)}
+.pink{background:linear-gradient(135deg,#C850C0,#4158D0)}
+.even{background:linear-gradient(135deg,#00D9A5,#00B894)}
+.odd{background:linear-gradient(135deg,#FF6B35,#FF5722)}
+.confidence{color:#FFC107;font-size:16px;font-weight:600;margin-bottom:4px;min-height:20px}
+.entry{color:#00D9FF;font-size:16px;font-weight:600;min-height:20px}
+</style>
+</head>
+<body>
+<div class="header">Matches Vision</div>
+
+<div class="tabs">
+  <div class="tab active" id="matchesTab">Matches Tool</div>
+  <div class="tab" id="evenOddTab">Even / Odd Tool</div>
+</div>
+
+<div class="desc" id="desc">
+  <h1>Matches Tool</h1>
+  <p>Track the <b>most frequent digit</b> for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>
+</div>
+
+<div id="container"></div>
+
+<script>
+window.onload = function() {
+  const markets = [
+    {symbol:"R_10", name:"Volatility 10 (1s) Index", color:"prediction"},
+    {symbol:"R_25", name:"Volatility 25 (1s) Index", color:"pink"},
+    {symbol:"R_50", name:"Volatility 50 (1s) Index", color:"prediction"},
+    {symbol:"R_75", name:"Volatility 75 (1s) Index", color:"pink"},
+    {symbol:"R_100", name:"Volatility 100 (1s) Index", color:"prediction"}
+  ];
+  
+  const container = document.getElementById("container");
+  let currentMode = 'matches';
+  let data = {};
+
+  document.getElementById("matchesTab").onclick = () => switchMode('matches');
+  document.getElementById("evenOddTab").onclick = () => switchMode('evenodd');
+
+  function switchMode(mode){
+    currentMode = mode;
+    document.querySelectorAll('.tab').forEach(t=>t.className='tab');
+    document.getElementById(mode==='matches'?'matchesTab':'evenOddTab').className='tab active';
+    
+    let titles = {
+      matches: `<h1>Matches Tool</h1><p>Track the <b>most frequent digit</b> for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>`,
+      evenodd: `<h1>Even / Odd Tool</h1><p>Track <b>Even vs Odd</b> dominance for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>`
+    };
+    document.getElementById("desc").innerHTML = titles;
+    
+    markets.forEach(m => {
+      data[m.symbol].phase = 1;
+      data[m.symbol].timer = 15;
+    });
+  }
+
+  markets.forEach((m, index) => {
+    data[m.symbol] = {
+      digits:{0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0},
+      total:0,
+      phase:1,
+      timer:15,
+      savedDigit:'-',
+      savedConf:'',
+      savedCls:''
+    };
+    
+    let div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      <div class="card-title">${m.name}</div>
+      <div class="circle countdown" id="${m.symbol}_circle">15s</div>
+      <div class="confidence" id="${m.symbol}_conf"></div>
+      <div class="entry" id="${m.symbol}_entry">Next prediction in</div>
+    `;
+    container.appendChild(div);
+
+    setInterval(()=>{
+      let d = data[m.symbol];
+      let circle = document.getElementById(m.symbol+"_circle");
+      let conf = document.getElementById(m.symbol+"_conf");
+      let entry = document.getElementById(m.symbol+"_entry");
+      
+      d.timer--;
+      
+      if(d.phase === 1){
+        // PHASE 1: Count down 15s while collecting data
+        circle.className = 'circle countdown';
+        circle.innerText = d.timer+'s';
+        entry.innerText = 'Next prediction in';
+        conf.innerText = '';
+        
+        if(d.timer <= 0){
+          if(currentMode === 'matches'){
+            // MATCHES: Most frequent digit
+            let maxCount=0,maxDigit=0;
+            for(let i=0;i<=9;i++) if(d.digits[i]>maxCount){maxCount=d.digits[i];maxDigit=i;}
+            let confidence = d.total > 0? Math.round((maxCount/d.total)*100) : 0;
+            d.savedDigit = d.total > 0? maxDigit : '-';
+            d.savedConf = `Confidence: ${confidence}%`;
+            d.savedCls = m.color;
+          } else {
+            // EVEN/ODD: Count evens vs odds
+            let evenCount = d.digits[0]+d.digits[2]+d.digits[4]+d.digits[6]+d.digits[8];
+            let oddCount = d.digits[1]+d.digits[3]+d.digits[5]+d.digits[7]+d.digits[9];
+            let isEven = evenCount >= oddCount;
+            let winnerCount = Math.max(evenCount, oddCount);
+            let confidence = d.total > 0? Math.round((winnerCount/d.total)*100) : 0;
+            d.savedDigit = d.total > 0? (isEven? 'E' : 'O') : '-';
+            d.savedConf = d.total > 0? `${isEven?'EVEN':'ODD'}: ${confidence}%` : 'No data';
+            d.savedCls = isEven? 'even' : 'odd';
+          }
+          
+          // PHASE 2: Show prediction + start 5s entry countdown
+          d.phase = 2;
+          d.timer = 5;
+          
+          // Reset data for next 15s cycle
+          d.digits = {0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0};
+          d.total = 0;
+        }
+        
+      } else {
+        // PHASE 2: Show saved result so confidence stays visible
+        circle.className = `circle ${d.savedCls}`;
+        circle.innerText = d.savedDigit;
+        conf.innerText = d.savedConf;
+        entry.innerText = `Entry in ${d.timer}s`;
+        
+        if(d.timer <= 0){
+          // Back to PHASE 1: 15s countdown
+          d.phase = 1;
+          d.timer = 15;
+        }
+      }
+    },1000);
+
+    setTimeout(() => {
+      let ws=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+      ws.onopen=()=>ws.send(JSON.stringify({ticks:m.symbol,subscribe:1}));
+      ws.onmessage=e=>{
+        let res=JSON.parse(e.data);
+        if(res.tick && data[m.symbol].phase === 1){
+          let last=parseInt(res.tick.quote.toFixed(2).slice(-1));
+          data[m.symbol].digits[last]++;
+          data[m.symbol].total++;
+        }
+      };
+    }, index * 800);
+  });
+};
+</script>
+</body>
+</html>
