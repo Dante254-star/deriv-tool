@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matches Vision</title>
+<style>
+  body{background:#0B0F1A;color:white;font-family:sans-serif;padding:15px;margin:0}
+.header{color:#00D9FF;font-size:24px;font-weight:bold;margin-bottom:20px}
+.tabs{display:flex;gap:10px;margin-bottom:25px}
+.tab{padding:10px 20px;border-radius:8px;text-align:center;background:#151A2A;border:1px solid #1F2535;font-size:14px;cursor:pointer}
+.tab.active{background:#00D9FF;color:#0B0F1A;font-weight:bold}
+.desc{text-align:center;margin-bottom:25px}
+.desc h1{color:#00D9FF;font-size:28px;margin:0 0 8px 0}
+.desc p{opacity:0.8;margin:0;font-size:14px;line-height:1.4}
+.card{background:#151A2A;border:1px solid #1F2535;border-radius:16px;padding:25px 20px;margin-bottom:20px;text-align:center}
+.card-title{color:#00D9FF;font-size:18px;font-weight:600;margin-bottom:20px}
+.circle{width:110px;height:110px;border-radius:50%;margin:0 auto 12px auto;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:bold}
+.countdown{background:#1A2030;color:#FFF}
+.prediction{background:linear-gradient(135deg,#00A8FF,#0077FF)}
+.pink{background:linear-gradient(135deg,#C850C0,#4158D0)}
+.even{background:linear-gradient(135deg,#00D9A5,#00A87E)}
+.odd{background:linear-gradient(135deg,#FF6B35,#FF8C42)}
+.over{background:linear-gradient(135deg,#FFB800,#FF8C00)}
+.under{background:linear-gradient(135deg,#8B5CF6,#7C3AED)}
+.confidence{color:#FFC107;font-size:16px;font-weight:600;margin-bottom:4px;min-height:20px}
+.entry{color:#00D9FF;font-size:16px;font-weight:600;min-height:20px}
+.alert{color:#00FF88;font-size:18px;font-weight:bold;margin-top:8px;min-height:24px}
+.ticks{font-size:11px;color:#5A6275;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="header">Matches Vision</div>
+
+<div class="tabs">
+  <div class="tab active" id="matchesTab">Matches</div>
+  <div class="tab" id="evenOddTab">Even / Odd</div>
+  <div class="tab" id="overUnderTab">Over / Under</div>
+</div>
+
+<div class="desc" id="desc">
+  <h1>Matches Tool</h1>
+  <p>Track the <b>most frequent digit</b> for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>
+</div>
+
+<div id="container"></div>
+
+<script>
+window.onload = function() {
+  const markets = [
+    {symbol:"R_10", name:"Volatility 10 (1s) Index", color:"prediction"},
+    {symbol:"R_10_1HZ", name:"Volatility 10 Index", color:"pink"},
+    {symbol:"R_25", name:"Volatility 25 (1s) Index", color:"prediction"},
+    {symbol:"R_25_1HZ", name:"Volatility 25 Index", color:"pink"},
+    {symbol:"R_50", name:"Volatility 50 (1s) Index", color:"prediction"},
+    {symbol:"R_50_1HZ", name:"Volatility 50 Index", color:"pink"},
+    {symbol:"R_75", name:"Volatility 75 (1s) Index", color:"prediction"},
+    {symbol:"R_75_1HZ", name:"Volatility 75 Index", color:"pink"},
+    {symbol:"R_100", name:"Volatility 100 (1s) Index", color:"prediction"},
+    {symbol:"R_100_1HZ", name:"Volatility 100 Index", color:"pink"}
+  ];
+  
+  const container = document.getElementById("container");
+  const matchesTab = document.getElementById("matchesTab");
+  const evenOddTab = document.getElementById("evenOddTab");
+  const overUnderTab = document.getElementById("overUnderTab");
+  const desc = document.getElementById("desc");
+  let currentMode = 'matches';
+  let data = {};
+
+  function switchMode(mode){
+    currentMode = mode;
+    matchesTab.className = 'tab';
+    evenOddTab.className = 'tab';
+    overUnderTab.className = 'tab';
+    
+    if(mode === 'matches'){
+      matchesTab.className = 'tab active';
+      desc.innerHTML = `<h1>Matches Tool</h1><p>Track the <b>most frequent digit</b> for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>`;
+    } else if(mode === 'evenodd'){
+      evenOddTab.className = 'tab active';
+      desc.innerHTML = `<h1>Even / Odd Tool</h1><p>Track <b>Even vs Odd</b> dominance for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>`;
+    } else {
+      overUnderTab.className = 'tab active';
+      desc.innerHTML = `<h1>Over / Under Tool</h1><p>Track <b>Over 3 vs Under 7</b> for<br>multiple <span style="color:#00D9FF">volatility indices</span>.</p>`;
+    }
+    
+    markets.forEach(m => {
+      data[m.symbol].phase = 1;
+      data[m.symbol].timer = 15;
+    });
+  }
+
+  matchesTab.onclick = () => switchMode('matches');
+  evenOddTab.onclick = () => switchMode('evenodd');
+  overUnderTab.onclick = () => switchMode('overunder');
+
+  markets.forEach((m, index) => {
+    data[m.symbol] = {
+      digits:{0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0},
+      total:0,
+      phase:1,
+      timer:15
+    };
+    
+    let div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      <div class="card-title">${m.name}</div>
+      <div class="circle countdown" id="${m.symbol}_circle">15s</div>
+      <div class="confidence" id="${m.symbol}_conf"></div>
+      <div class="entry" id="${m.symbol}_entry">Next prediction in</div>
+      <div class="alert" id="${m.symbol}_alert"></div>
+      <div class="ticks" id="${m.symbol}_ticks">Ticks: 0</div>
+    `;
+    container.appendChild(div);
+
+    setInterval(()=>{
+      let d = data[m.symbol];
+      let circle = document.getElementById(m.symbol+"_circle");
+      let conf = document.getElementById(m.symbol+"_conf");
+      let entry = document.getElementById(m.symbol+"_entry");
+      let alert = document.getElementById(m.symbol+"_alert");
+      let ticks = document.getElementById(m.symbol+"_ticks");
+      
+      d.timer--;
+      ticks.innerText = `Ticks: ${d.total}`;
+      
+      if(d.phase === 1){
+        circle.className = 'circle countdown';
+        circle.innerText = d.timer+'s';
+        entry.innerText = 'Next prediction in';
+        conf.innerText = '';
+        alert.innerText = '';
+        
+        if(d.timer <= 0){
+          let displayText = '-';
+          let displayClass = m.color;
+          let confidence = 0;
+          
+          if(currentMode === 'matches'){
+            let maxCount=0,maxDigit=0;
+            for(let i=0;i<=9;i++) if(d.digits[i]>maxCount){maxCount=d.digits[i];maxDigit=i;}
+            confidence = d.total > 0? Math.round((maxCount/d.total)*100) : 0;
+            displayText = d.total > 0? maxDigit : '-';
+            displayClass = m.color;
+            conf.innerText = `Confidence: ${confidence}%`;
+            
+          } else if(currentMode === 'evenodd'){
+            let evenCount = d.digits[0]+d.digits[2]+d.digits[4]+d.digits[6]+d.digits[8];
+            let oddCount = d.digits[1]+d.digits[3]+d.digits[5]+d.digits[7]+d.digits[9];
+            let isEven = evenCount >= oddCount;
+            let winnerCount = Math.max(evenCount, oddCount);
+            confidence = d.total > 0? Math.round((winnerCount/d.total)*100) : 0;
+            displayText = d.total > 0? (isEven? 'E' : 'O') : '-';
+            displayClass = isEven? 'even' : 'odd';
+            conf.innerText = d.total > 0? `${isEven? 'EVEN' : 'ODD'}: ${confidence}%` : 'No data';
+            
+          } else {
+            // OVER 3 = digits 4,5,6,7,8,9 | UNDER 7 = digits 0,1,2,3,4,5,6
+            let overCount = d.digits[4]+d.digits[5]+d.digits[6]+d.digits[7]+d.digits[8]+d.digits[9];
+            let underCount = d.digits[0]+d.digits[1]+d.digits[2]+d.digits[3]+d.digits[4]+d.digits[5]+d.digits[6];
+            let isOver = overCount >= underCount;
+            let winnerCount = Math.max(overCount, underCount);
+            confidence = d.total > 0? Math.round((winnerCount/d.total)*100) : 0;
+            displayText = d.total > 0? (isOver? 'O' : 'U') : '-';
+            displayClass = isOver? 'over' : 'under';
+            conf.innerText = d.total > 0? `${isOver? 'OVER 3' : 'UNDER 7'}: ${confidence}%` : 'No data';
+          }
+          
+          d.phase = 2;
+          d.timer = 5;
+          
+          circle.className = `circle ${displayClass}`;
+          circle.innerText = displayText;
+          entry.innerText = `Entry in ${d.timer}s`;
+          
+          d.digits = {0:0,1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0};
+          d.total = 0;
+        }
+        
+      } else {
+        entry.innerText = `Entry in ${d.timer}s`;
+        alert.innerText = '';
+        
+        if(d.timer <= 0){
+          alert.innerText = 'TRADE NOW';
+          entry.innerText = 'Execute trade';
+          
+          setTimeout(() => {
+            d.phase = 1;
+            d.timer = 15;
+          }, 2000);
+        }
+      }
+    },1000);
+
+    setTimeout(() => {
+      let ws=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+      ws.onopen=()=>ws.send(JSON.stringify({ticks:m.symbol,subscribe:1}));
+      ws.onmessage=e=>{
+        let res=JSON.parse(e.data);
+        if(res.tick && data[m.symbol].phase === 1){
+          let last=parseInt(res.tick.pip);
+          data[m.symbol].digits[last]++;
+          data[m.symbol].total++;
+        }
+      };
+    }, index * 500);
+  });
+};
+</script>
+</body>
+</html>
