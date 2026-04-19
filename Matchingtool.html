@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matches Vision</title>
+<style>
+  body{background:#0B0F1A;color:white;font-family:sans-serif;padding:15px;margin:0}
+.header{color:#00D9FF;font-size:24px;font-weight:bold;margin-bottom:20px}
+.tabs{display:flex;gap:10px;margin-bottom:25px}
+.tab{padding:10px 20px;border-radius:8px;text-align:center;background:#151A2A;border:1px solid #1F2535;font-size:14px;cursor:pointer}
+.tab.active{background:#00D9FF;color:#0B0F1A;font-weight:bold}
+.desc{text-align:center;margin-bottom:25px}
+.desc h1{color:#00D9FF;font-size:28px;margin:0 0 8px 0}
+.desc p{opacity:0.8;margin:0;font-size:14px;line-height:1.4}
+.card{background:#151A2A;border:1px solid #1F2535;border-radius:16px;padding:25px 20px;margin-bottom:20px;text-align:center}
+.card-title{color:#00D9FF;font-size:18px;font-weight:600;margin-bottom:20px}
+.circle{width:110px;height:110px;border-radius:50%;margin:0 auto 12px auto;display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:bold}
+.countdown{background:#1A2030;color:#FFF}
+.prediction{background:linear-gradient(135deg,#00A8FF,#0077FF)}
+.pink{background:linear-gradient(135deg,#C850C0,#4158D0)}
+.even{background:linear-gradient(135deg,#00D9A5,#00A87E)}
+.odd{background:linear-gradient(135deg,#FF6B35,#FF8C42)}
+.over{background:linear-gradient(135deg,#FFB800,#FF8C00)}
+.under{background:linear-gradient(135deg,#8B5CF6,#7C3AED)}
+.confidence{color:#FFC107;font-size:16px;font-weight:600;margin-bottom:4px;min-height:20px}
+.entry{color:#00D9FF;font-size:16px;font-weight:600;min-height:20px}
+.alert{color:#00FF88;font-size:18px;font-weight:bold;margin-top:8px;min-height:24px}
+.ticks{font-size:11px;color:#5A6275;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="header">Matches Vision</div>
+
+<div class="tabs">
+  <div class="tab active" id="matchesTab">Matches</div>
+  <div class="tab" id="evenOddTab">Even/Odd</div>
+  <div class="tab" id="overUnderTab">Over/Under</div>
+</div>
+
+<div class="desc" id="desc">
+  <h1>Matches Tool</h1>
+  <p>Predicts <b>most frequent digit</b> every 15s<br>for multiple <span style="color:#00D9FF">volatility indices</span></p>
+</div>
+
+<div id="container"></div>
+
+<script>
+window.onload = function() {
+  const markets = [
+    {symbol:"R_10", name:"Volatility 10 (1s) Index", color:"prediction"},
+    {symbol:"R_10_1HZ", name:"Volatility 10 Index", color:"pink"},
+    {symbol:"R_25", name:"Volatility 25 (1s) Index", color:"prediction"},
+    {symbol:"R_25_1HZ", name:"Volatility 25 Index", color:"pink"},
+    {symbol:"R_50", name:"Volatility 50 (1s) Index", color:"prediction"},
+    {symbol:"R_50_1HZ", name:"Volatility 50 Index", color:"pink"},
+    {symbol:"R_75", name:"Volatility 75 (1s) Index", color:"prediction"},
+    {symbol:"R_75_1HZ", name:"Volatility 75 Index", color:"pink"},
+    {symbol:"R_100", name:"Volatility 100 (1s) Index", color:"prediction"},
+    {symbol:"R_100_1HZ", name:"Volatility 100 Index", color:"pink"}
+  ];
+  
+  const container = document.getElementById("container");
+  let currentMode = 'matches';
+  let data = {};
+
+  document.getElementById("matchesTab").onclick = () => switchMode('matches');
+  document.getElementById("evenOddTab").onclick = () => switchMode('evenodd');
+  document.getElementById("overUnderTab").onclick = () => switchMode('overunder');
+
+  function switchMode(mode){
+    currentMode = mode;
+    document.querySelectorAll('.tab').forEach(t=>t.className='tab');
+    document.getElementById(mode==='matches'?'matchesTab':mode==='evenodd'?'evenOddTab':'overUnderTab').className='tab active';
+    
+    let titles = {
+      matches: `<h1>Matches Tool</h1><p>Predicts <b>most frequent digit</b> every 15s<br>for multiple <span style="color:#00D9FF">volatility indices</span></p>`,
+      evenodd: `<h1>Even / Odd Tool</h1><p>Predicts <b>Even vs Odd</b> every 15s<br>for multiple <span style="color:#00D9FF">volatility indices</span></p>`,
+      overunder: `<h1>Over / Under Tool</h1><p>Predicts <b>Over 3 vs Under 7</b> every 15s<br>for multiple <span style="color:#00D9FF">volatility indices</span></p>`
+    };
+    document.getElementById("desc").innerHTML = titles[mode];
+    
+    markets.forEach(m => {
+      data[m.symbol].phase = 1;
+      data[m.symbol].timer = 15;
+    });
+  }
+
+  markets.forEach((m, index) => {
+    data[m.symbol] = {
+      history:[],
+      phase:1,
+      timer:15,
+      savedDigit:'-',
+      savedConf:'No data',
+      savedCls:''
+    };
+    
+    let div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      <div class="card-title">${m.name}</div>
+      <div class="circle countdown" id="${m.symbol}_circle">15s</div>
+      <div class="confidence" id="${m.symbol}_conf"></div>
+      <div class="entry" id="${m.symbol}_entry">Next prediction in</div>
+      <div class="alert" id="${m.symbol}_alert"></div>
+      <div class="ticks" id="${m.symbol}_ticks">Ticks: 0</div>
+    `;
+    container.appendChild(div);
+
+    setInterval(()=>{
+      let d = data[m.symbol];
+      let circle = document.getElementById(m.symbol+"_circle");
+      let conf = document.getElementById(m.symbol+"_conf");
+      let entry = document.getElementById(m.symbol+"_entry");
+      let alert = document.getElementById(m.symbol+"_alert");
+      let ticks = document.getElementById(m.symbol+"_ticks");
+      
+      d.timer--;
+      ticks.innerText = `Ticks: ${d.history.length}`;
+      
+      if(d.phase === 1){
+        circle.className = 'circle countdown';
+        circle.innerText = d.timer+'s';
+        entry.innerText = 'Next prediction in';
+        conf.innerText = '';
+        alert.innerText = '';
+        
+        if(d.timer <= 0){
+          let h = d.history.slice(-100);
+          let digit = '-';
+          let cls = m.color;
+          let confTxt = 'No data';
+          
+          if(h.length > 0){
+            if(currentMode === 'matches'){
+              let counts = Array(10).fill(0);
+              h.forEach(x=>counts[x]++);
+              let max = Math.max(...counts);
+              digit = counts.indexOf(max);
+              cls = m.color;
+              confTxt = `Confidence: ${Math.round(max/h.length*100)}%`;
+              
+            } else if(currentMode === 'evenodd'){
+              let e = h.filter(x=>x%2===0).length;
+              let o = h.length - e;
+              let isE = e >= o;
+              digit = isE? 'E' : 'O';
+              cls = isE? 'even' : 'odd';
+              confTxt = `${isE?'EVEN':'ODD'}: ${Math.round(Math.max(e,o)/h.length*100)}%`;
+              
+            } else {
+              let over = h.filter(x=>x>=4).length; // Over 3 = 4,5,6,7,8,9
+              let under = h.filter(x=>x<=6).length; // Under 7 = 0,1,2,3,4,5,6
+              let isO = over >= under;
+              digit = isO? 'O' : 'U';
+              cls = isO? 'over' : 'under';
+              confTxt = `${isO?'OVER 3':'UNDER 7'}: ${Math.round(Math.max(over,under)/h.length*100)}%`;
+            }
+          }
+          
+          // SAVE IT SO IT DOESN'T DISAPPEAR
+          d.savedDigit = digit;
+          d.savedConf = confTxt;
+          d.savedCls = cls;
+          d.phase = 2;
+          d.timer = 5;
+        }
+        
+      } else {
+        // PHASE 2: FORCE SHOW THE SAVED RESULT EVERY TICK
+        circle.className = `circle ${d.savedCls}`;
+        circle.innerText = d.savedDigit;
+        conf.innerText = d.savedConf; // THIS IS THE FIX - KEEPS SHOWING
+        entry.innerText = `Entry in ${d.timer}s`;
+        alert.innerText = '';
+        
+        if(d.timer <= 0){
+          alert.innerText = 'TRADE NOW';
+          entry.innerText = 'Execute trade';
+          
+          setTimeout(() => {
+            d.phase = 1;
+            d.timer = 15;
+            d.history = [];
+            d.savedDigit = '-';
+            d.savedConf = 'No data';
+            d.savedCls = '';
+          }, 2000);
+        }
+      }
+    },1000);
+
+    setTimeout(() => {
+      let ws=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+      ws.onopen=()=>ws.send(JSON.stringify({ticks:m.symbol,subscribe:1}));
+      ws.onmessage=e=>{
+        let res=JSON.parse(e.data);
+        if(res.tick){
+          let last=parseInt(res.tick.pip);
+          data[m.symbol].history.push(last);
+          if(data[m.symbol].history.length > 100) data[m.symbol].history.shift();
+        }
+      };
+    }, index * 500);
+  });
+};
+</script>
+</body>
+</html>
