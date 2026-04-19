@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deriv Matches Predictor</title>
+
+<style>
+body{
+  background:#0B0F1A;
+  color:white;
+  font-family:Arial;
+  padding:15px;
+  margin:0;
+}
+
+.header{
+  color:#00D9FF;
+  font-size:24px;
+  font-weight:bold;
+  margin-bottom:20px;
+}
+
+.card{
+  background:#151A2A;
+  border:1px solid #1F2535;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:15px;
+  text-align:center;
+}
+
+.title{
+  color:#00D9FF;
+  font-size:16px;
+  margin-bottom:15px;
+}
+
+.circle{
+  width:90px;
+  height:90px;
+  border-radius:50%;
+  margin:auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:30px;
+  font-weight:bold;
+}
+
+.wait{background:#1A2030;}
+.active{background:#0077FF;}
+
+.conf{margin-top:10px;color:#FFC107;}
+.entry{color:#00D9FF;margin-top:5px;}
+</style>
+</head>
+
+<body>
+
+<div class="header">Deriv Predictor</div>
+<div id="app"></div>
+
+<script>
+const markets = [
+  {symbol:"R_10", name:"Volatility 10 (1s)"},
+  {symbol:"R_25", name:"Volatility 25 (1s)"},
+  {symbol:"R_50", name:"Volatility 50 (1s)"},
+  {symbol:"R_75", name:"Volatility 75 (1s)"},
+  {symbol:"R_100", name:"Volatility 100 (1s)"}
+];
+
+const app = document.getElementById("app");
+let store = {};
+
+markets.forEach((m,i)=>{
+
+  store[m.symbol] = {
+    digits:Array(10).fill(0),
+    total:0,
+    timer:10,
+    phase:1
+  };
+
+  let el = document.createElement("div");
+  el.className="card";
+  el.innerHTML=`
+    <div class="title">${m.name}</div>
+    <div class="circle wait" id="${m.symbol}_c">10</div>
+    <div class="conf" id="${m.symbol}_conf">Collecting...</div>
+    <div class="entry" id="${m.symbol}_entry"></div>
+  `;
+  app.appendChild(el);
+
+  // TIMER
+  setInterval(()=>{
+    let d = store[m.symbol];
+    let c = document.getElementById(m.symbol+"_c");
+    let conf = document.getElementById(m.symbol+"_conf");
+    let entry = document.getElementById(m.symbol+"_entry");
+
+    d.timer--;
+
+    if(d.phase === 1){
+      c.innerText = d.timer;
+
+      if(d.timer <= 0){
+
+        let max = Math.max(...d.digits);
+        let digit = d.digits.indexOf(max);
+
+        let percentage = d.total > 0
+          ? Math.round((max/d.total)*100)
+          : 0;
+
+        let label = "WEAK";
+        if(percentage >= 70) label = "🔥 BEST";
+        else if(percentage >= 50) label = "👍 GOOD";
+
+        d.phase = 2;
+        d.timer = 5;
+
+        c.className="circle active";
+        c.innerText = digit;
+
+        conf.innerText = `${label} (${percentage}%)`;
+        entry.innerText = "Entry now";
+
+        // reset
+        d.digits.fill(0);
+        d.total = 0;
+      }
+
+    } else {
+      entry.innerText = "Next cycle in "+d.timer+"s";
+
+      if(d.timer <= 0){
+        d.phase = 1;
+        d.timer = 10;
+        c.className="circle wait";
+        c.innerText = d.timer;
+        conf.innerText="Collecting...";
+        entry.innerText="";
+      }
+    }
+
+  },1000);
+
+  // WEBSOCKET
+  setTimeout(()=>{
+    let ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+
+    ws.onopen = ()=>{
+      ws.send(JSON.stringify({ticks:m.symbol, subscribe:1}));
+    };
+
+    ws.onmessage = (msg)=>{
+      let data = JSON.parse(msg.data);
+
+      if(data.tick && store[m.symbol].phase === 1){
+        let last = parseInt(data.tick.quote.toString().slice(-1));
+        store[m.symbol].digits[last]++;
+        store[m.symbol].total++;
+      }
+    };
+
+  }, i
