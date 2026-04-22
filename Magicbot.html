@@ -1,0 +1,99 @@
+<script>
+let ws;
+let token = "fjI6A6U5MtlWX6J";
+
+let stake = 0.35;
+let baseStake = 0.35;
+let multiplier = 2;
+
+let currentBarrier = 2;
+let proposal_id = null;
+let contract_id = null;
+let isTrading = false;
+
+function log(msg){
+  document.getElementById("log").innerHTML += msg + "<br>";
+}
+
+function startBot(){
+  ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ authorize: token }));
+  };
+
+  ws.onmessage = (msg) => {
+    let data = JSON.parse(msg.data);
+
+    if(data.error){
+      log("❌ ERROR: " + data.error.message);
+      return;
+    }
+
+    if(data.msg_type === "authorize"){
+      log("✅ Connected");
+      getProposal();
+    }
+
+    if(data.msg_type === "proposal"){
+      proposal_id = data.proposal.id;
+      buyContract();
+    }
+
+    if(data.msg_type === "buy"){
+      contract_id = data.buy.contract_id;
+      isTrading = true;
+      monitorContract();
+    }
+
+    if(data.msg_type === "proposal_open_contract"){
+      if(data.proposal_open_contract.is_sold){
+        isTrading = false;
+        let profit = data.proposal_open_contract.profit;
+
+        if(profit > 0){
+          log("✅ WIN");
+          stake = baseStake;
+          currentBarrier = 2;
+        } else {
+          log("❌ LOSS");
+          stake *= multiplier;
+          currentBarrier = 4;
+        }
+
+        setTimeout(getProposal, 1000); // next trade
+      }
+    }
+  };
+}
+
+function getProposal(){
+  if(isTrading) return;
+
+  ws.send(JSON.stringify({
+    proposal: 1,
+    amount: stake,
+    basis: "stake",
+    contract_type: "DIGITOVER",
+    currency: "USD",
+    duration: 1,
+    duration_unit: "t",
+    symbol: "R_100",
+    barrier: currentBarrier
+  }));
+}
+
+function buyContract(){
+  ws.send(JSON.stringify({
+    buy: proposal_id,
+    price: stake
+  }));
+}
+
+function monitorContract(){
+  ws.send(JSON.stringify({
+    proposal_open_contract: 1,
+    contract_id: contract_id
+  }));
+}
+</script>
