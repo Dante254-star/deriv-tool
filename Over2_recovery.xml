@@ -1,0 +1,108 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <variables>
+    <variable id="stake">stake</variable>
+    <variable id="base">base</variable>
+    <variable id="mult">mult</variable>
+  </variables>
+
+  <block type="trade" id="trade" x="50" y="50">
+    <statement name="SUBMARKET">
+      <block type="submarket">
+        <field name="SUBMARKET_LIST">synthetic_index</field>
+        <statement name="SYMBOL">
+          <block type="symbol">
+            <field name="SYMBOL_LIST">R_100</field>
+          </block>
+        </statement>
+      </block>
+    </statement>
+
+    <statement name="INITIALIZATION">
+      <block type="variables_set">
+        <field name="VAR" id="base">base</field>
+        <value name="VALUE">
+          <block type="math_number">
+            <field name="NUM">0.35</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set">
+            <field name="VAR" id="stake">stake</field>
+            <value name="VALUE">
+              <block type="variables_get">
+                <field name="VAR" id="base">base</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set">
+                <field name="VAR" id="mult">mult</field>
+                <value name="VALUE">
+                  <block type="math_number">
+                    <field name="NUM">2</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <statement name="PURCHASE">
+      <block type="purchase">
+        <field name="CONTRACT_TYPE">DIGITOVER</field>
+        <value name="AMOUNT">
+          <block type="variables_get">
+            <field name="VAR" id="stake">stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <block type="math_number">
+            <field name="NUM">2</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+
+    <statement name="AFTER_PURCHASE">
+      <block type="controls_if">
+        <value name="IF0">
+          <block type="contract_check_result">
+            <field name="RESULT">loss</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set">
+            <field name="VAR" id="stake">stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <block type="variables_get">
+                    <field name="VAR" id="stake">stake</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="variables_get">
+                    <field name="VAR" id="mult">mult</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </statement>
+
+        <statement name="ELSE">
+          <block type="variables_set">
+            <field name="VAR" id="stake">stake</field>
+            <value name="VALUE">
+              <block type="variables_get">
+                <field name="VAR" id="base">base</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+</xml>
